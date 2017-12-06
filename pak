@@ -1,0 +1,216 @@
+#!/bin/bash
+
+# Settings and options
+o_get=no
+o_install=no
+o_verbose=default
+o_help=no
+o_show=no
+o_pkg=''
+
+root="$HOME/pak-root"
+
+temp_dir="/tmp/pak/download-$RANDOM-$RANDOM-$RANDOM-$RANDOM/"
+
+help_exit_status=0
+
+version=1.0
+
+# String data
+version_string="PAK v $version"
+usage_string="Usage: $0 [-g|-i|-v|-q|-S|-h|-V|-u] [--get|--install|--verbose|--silent|--show|--help|--version|--usage|--uninstall] FILE_OR_URL"
+help_string="
+    -g|--get        Download package
+    -i|--install    Only install package, don't download
+    -v|--verbose    Be verbose
+    -q|--silent     Output nothing, only return an exit status
+    -S|--show       Only show package information, don't install
+    -h|--help       Show this help
+       --usage      Show a brief usage information
+    -V|--version    Show version information
+    -u|--uninstall  Uninstall package"
+
+# Functions
+die()
+{
+    rm -rf "$temp_dir"
+    case $o_verbose in
+        silent)
+            false
+            ;;
+        *)
+            echo "Fatal error: $1" >&2
+    esac
+    exit 1
+}
+
+output()
+{
+    case $o_verbose in
+        silent)
+            true
+            ;;
+        *)
+            if ([ x$2 == x-v ] && [ $o_verbose == verbose ]) || [ x$2 != x-v ]; then
+                echo -e "$1"
+            fi
+            ;;
+    esac
+}
+
+ask()
+{
+    case $o_verbose in
+        silent)
+            return 0
+            ;;
+        *)
+            output "$1"
+            read ans
+            case $ans in
+                y|yes|Y|Yes|YES)
+                    return 0
+                    ;;
+                *)
+                    return 1
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+show_help()
+{
+    case $o_help in
+        usage)
+            echo "$usage_string"
+            ;;
+        help)
+            echo "$usage_string"
+            echo "$help_string"
+            ;;
+        version)
+            echo "$version_string"
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+    return $help_exit_status
+}
+
+# Parse args
+while [ x$1 != x ]; do
+    case $1 in
+        -g|--get)
+            o_get=yes
+            o_install=yes
+            ;;
+        -i|--install)
+            o_install=yes
+            o_get=no
+            ;;
+        -v|--verbose)
+            o_verbose=verbose
+            ;;
+        -q|--silent)
+            o_verbose=silent
+            ;;
+        -S|--show)
+            o_show=yes
+            o_install=no
+            ;;
+        -h|--help)
+            o_help=help
+            ;;
+        --usage)
+            o_help=usage
+            ;;
+        -V|--version)
+            o_help=version
+            ;;
+        -u|--uninstall)
+            o_install=uninstall
+            ;;
+        -*)
+            o_help=usage
+            help_exit_status=1
+            ;;
+        *)
+            o_pkg="$1"
+            ;;
+    esac
+    shift
+done
+
+
+#echo "Args:
+#  -g=$o_get
+#  -i=$o_install
+#  -v=$o_verbose
+#  -h=$o_help
+#  -S=$o_show
+#"
+show_help
+
+pak_fname="$o_pkg"
+
+mkdir -p "$root"
+
+case $o_get in
+    yes)
+        pak_url="$o_pkg"
+        mkdir -p "$temp_dir" || die 'Unable to create temporary directory'
+        wget -O "$temp_dir/package.pak" "$pak_url" || die 'Unable to get the package'
+        pak_fname="$temp_dir/package.pak"
+        ;;
+esac
+
+case $o_show in
+    yes)
+        output 'Contents:'
+        tar -tf "$pak_fname"
+        ;;
+esac
+
+case $o_install in
+    yes)
+        output "Installing $pak_fname"
+        if ! ask "Do you really want to install package?"; then
+            output 'Aborting'
+            rm -rf "$temp_dir"
+            exit 1;
+        fi
+        if tar -tf "$pak_fname" ./install.sh 2>/dev/null; then
+            tar -xf "$pak_fname" ./install.sh
+            output 'Running install.sh' -v
+            bash install.sh "$pak_fname" || die 'Failed to install'
+            rm install.sh
+        else
+            output "Unpacking to $root" -v
+            tar -xf "$pak_fname" -C "$root" || die 'Failed to install'
+        fi
+        output "Successfully installed"
+        rm -rf "$temp_dir"
+        ;;
+    uninstall)
+        output "Uninstalling $pak_fname"
+        if ! ask "Do you really want to uninstall package?"; then
+            output 'Aborting'
+            exit 1
+        fi
+        if tar -tf "$pak_fname" ./uninstall.sh 2>/dev/null; then
+            tar -xf "$pak_fname" ./uninstall.sh
+            output 'Running uninstall.sh' -v
+            bash uninstall.sh "$pak_fname" || die 'Failed to uninstall'
+            rm uninstall.sh
+        else
+            output "Going to remove:\n`tar -tf "$pak_fname" | sed "s#^#$root/#g"`"
+            if ! ask 'Continue?'; then
+                output 'Aborting'
+                exit 1
+            fi
+            (tar -tf "$pak_fname" | sed "s#^#$root/#g" | xargs rm) || die 'Failed to uninstall'
+        fi
+        output 'Successfully uninstalled'
+esac
