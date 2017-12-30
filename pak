@@ -12,13 +12,16 @@ root="$HOME/pak-root"
 
 temp_dir="/tmp/pak/download-$RANDOM-$RANDOM-$RANDOM-$RANDOM/"
 
+paklist_dir="$root/paklist.d"
+
+
 help_exit_status=0
 
-version=1.0
+version="1.1 костыль edition"
 
 # String data
 version_string="PAK v $version"
-usage_string="Usage: $0 [-g|-i|-v|-q|-S|-h|-V|-u] [--get|--install|--verbose|--silent|--show|--help|--version|--usage|--uninstall] FILE_OR_URL"
+usage_string="Usage: $0 [-g|-i|-v|-q|-S|-h|-V|-u|-U|-r] [--get|--install|--verbose|--silent|--show|--help|--version|--usage|--uninstall|--update|--root] FILE_URL_OR_PACKAGE_NAME"
 help_string="
     -g|--get        Download package
     -i|--install    Only install package, don't download
@@ -28,7 +31,9 @@ help_string="
     -h|--help       Show this help
        --usage      Show a brief usage information
     -V|--version    Show version information
-    -u|--uninstall  Uninstall package"
+    -u|--uninstall  Uninstall package
+    -U|--update     Update package list
+    -r|--root        Print pak_root value"
 
 # Functions
 die()
@@ -92,6 +97,9 @@ show_help()
         version)
             echo "$version_string"
             ;;
+        root)
+            echo "$root"
+            ;;
         *)
             return 0
             ;;
@@ -121,9 +129,18 @@ while [ x$1 != x ]; do
             o_install=no
             ;;
         -h|--help)
+            o_install=no
+            o_get=no
             o_help=help
             ;;
+        -r|--root)
+            o_install=no
+            o_get=no
+            o_help=root
+            ;;
         --usage)
+            o_install=no
+            o_get=no
             o_help=usage
             ;;
         -V|--version)
@@ -131,6 +148,10 @@ while [ x$1 != x ]; do
             ;;
         -u|--uninstall)
             o_install=uninstall
+            ;;
+        -U|--update)
+            o_install=update
+            o_get=no
             ;;
         -*)
             o_help=usage
@@ -151,7 +172,7 @@ done
 #  -h=$o_help
 #  -S=$o_show
 #"
-show_help
+show_help || exit 1
 
 pak_fname="$o_pkg"
 
@@ -213,4 +234,16 @@ case $o_install in
             (tar -tf "$pak_fname" | sed "s#^#$root/#g" | xargs rm) || die 'Failed to uninstall'
         fi
         output 'Successfully uninstalled'
+        ;;
+    update)
+        echo 'Updating package list'
+        for i in `ls $paklist_dir`; do
+            f="$paklist_dir/$i"
+            echo "Updating $f…"
+            lnk="`head -n 1 $f`"
+            wget $lnk -O "$f.new" || (echo "Unable to update $f"; continue)
+            mv "$f.new" "$f"
+            echo "$f updated successfully"
+        done
+        echo "Done"
 esac
