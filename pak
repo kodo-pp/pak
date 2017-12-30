@@ -21,7 +21,7 @@ version="1.1 костыль edition"
 
 # String data
 version_string="PAK v $version"
-usage_string="Usage: $0 [-g|-i|-v|-q|-S|-h|-V|-u|-U|-r] [--get|--install|--verbose|--silent|--show|--help|--version|--usage|--uninstall|--update|--root] FILE_URL_OR_PACKAGE_NAME"
+usage_string="Usage: $0 [-g|-i|-v|-q|-S|-h|-V|-u|-U|-r|-m] [--get|--install|--verbose|--silent|--show|--help|--version|--usage|--uninstall|--update|--root|--mirror] FILE_URL_OR_PACKAGE_NAME"
 help_string="
     -g|--get        Download package
     -i|--install    Only install package, don't download
@@ -33,7 +33,8 @@ help_string="
     -V|--version    Show version information
     -u|--uninstall  Uninstall package
     -U|--update     Update package list
-    -r|--root        Print pak_root value"
+    -r|--root       Print pak_root value
+    -m|--mirror     Get package from mirror"
 
 # Functions
 die()
@@ -44,7 +45,7 @@ die()
             false
             ;;
         *)
-            echo "Fatal error: $1" >&2
+            echo -e "\e[31mFatal error: $1\e[0m" >&2
     esac
     exit 1
 }
@@ -113,10 +114,12 @@ while [ x$1 != x ]; do
         -g|--get)
             o_get=yes
             o_install=yes
+            o_help=no
             ;;
         -i|--install)
             o_install=yes
             o_get=no
+            o_help=no
             ;;
         -v|--verbose)
             o_verbose=verbose
@@ -127,6 +130,7 @@ while [ x$1 != x ]; do
         -S|--show)
             o_show=yes
             o_install=no
+            o_help=no
             ;;
         -h|--help)
             o_install=no
@@ -148,10 +152,17 @@ while [ x$1 != x ]; do
             ;;
         -u|--uninstall)
             o_install=uninstall
+            o_help=no
             ;;
         -U|--update)
             o_install=update
             o_get=no
+            o_help=no
+            ;;
+        -m|--mirror)
+            o_install=yes
+            o_get=mirror
+            o_help=no
             ;;
         -*)
             o_help=usage
@@ -185,6 +196,28 @@ case $o_get in
         wget -O "$temp_dir/package.pak" "$pak_url" || die 'Unable to get the package'
         pak_fname="$temp_dir/package.pak"
         ;;
+    mirror)
+        pak_url=""
+        for i in `ls "$paklist_dir"`; do
+            s=`cat "$paklist_dir/$i" | egrep "^$o_pkg "`
+            #echo "s = [$s]"
+            if [ "x$s" != x ]; then
+                pak_url=`echo "$s" | awk '{print $2}'`
+                #echo "pu = [$pak_url]"
+                if [ "x$pak_url" == x ]; then
+                    continue
+                else
+                    break
+                fi
+            fi
+        done
+        #echo "[x$pak_url]"
+        if [ "x$pak_url" == x ]; then
+            die "Package \`$o_pkg' not found"
+        fi
+        mkdir -p "$temp_dir" || die 'Unable to create temporary directory'
+        wget -O "$temp_dir/package.pak" "$pak_url" || die 'Unable to get the package'
+        pak_fname="$temp_dir/package.pak"
 esac
 
 case $o_show in
@@ -237,13 +270,25 @@ case $o_install in
         ;;
     update)
         echo 'Updating package list'
-        for i in `ls $paklist_dir`; do
+        if ! [ -d "$paklist_dir" ]; then
+            mkdir "$paklist_dir"
+        fi
+        case `ls "$paklist_dir" | wc -l` in
+            0)
+                echo "No lists to update"
+                exit 1
+                ;;
+        esac
+        for i in `ls "$paklist_dir"`; do
             f="$paklist_dir/$i"
             echo "Updating $f…"
             lnk="`head -n 1 $f`"
-            wget $lnk -O "$f.new" || (echo "Unable to update $f"; continue)
+            if ! wget $lnk -O "$f.new"; then
+                echo -e "\e[31mUnable to update $f\e[0m"
+                continue
+            fi
             mv "$f.new" "$f"
-            echo "$f updated successfully"
+            echo -e "\e[32m$f updated successfully\e[0m"
         done
         echo "Done"
 esac
