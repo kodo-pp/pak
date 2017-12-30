@@ -17,7 +17,7 @@ paklist_dir="$root/paklist.d"
 
 help_exit_status=0
 
-version="1.1 костыль edition"
+version="1.2 костыль edition"
 
 # String data
 version_string="PAK v $version"
