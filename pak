@@ -22,7 +22,7 @@ Action:
     pakroot - print value of pakroot variable
     help    - Show this help screen and exit, do not parse options any further
 Options:
-    -f | --force    Ignore dependencies. Can \e[38mfuc\e[0m break everything
+    -f | --force    Ignore dependencies. Can \e[9mfuc\e[0m break everything
     -h | --help     Same as 'help' action
          --         Treat next options as filenames or package names
                     It is an error to use this option before specifying an action
@@ -66,11 +66,11 @@ show_help()
 {
     case $o_help in
         help)
-            echo "$usage_string"    # TODO: legacy code, get rid of usage_string
-            echo "$help_string"
+            echo -e "$usage_string"    # TODO: legacy code, get rid of usage_string
+            echo -e "$help_string"
             ;;
         version)
-            echo "$version_string"
+            echo -e "$version_string"
             ;;
         pakroot)
             echo "$pakroot"
