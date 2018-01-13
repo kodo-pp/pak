@@ -1,86 +1,63 @@
 #!/bin/bash
 
-# Settings and options
-o_get=no
-o_install=no
-o_verbose=default
-o_help=no
-o_show=no
-o_pkg=''
-
-root="$HOME/pak-root"
-
+# Configuration
+pakroot="$HOME/pak-root"
 temp_dir="/tmp/pak/download-$RANDOM-$RANDOM-$RANDOM-$RANDOM/"
-
-paklist_dir="$root/paklist.d"
-
 
 help_exit_status=0
 
-version="1.2 костыль edition"
-
 # String data
+version="2.0 [dev] buggy edition"
 version_string="PAK v $version"
-usage_string="Usage: $0 [-g|-i|-v|-q|-S|-h|-V|-u|-U|-r|-m] [--get|--install|--verbose|--silent|--show|--help|--version|--usage|--uninstall|--update|--root|--mirror] FILE_URL_OR_PACKAGE_NAME"
+
+usage_string="Usage: $0 [options] <action> <package> [<package> ...]"
 help_string="
-    -g|--get        Download package
-    -i|--install    Only install package, don't download
-    -v|--verbose    Be verbose
-    -q|--silent     Output nothing, only return an exit status
-    -S|--show       Only show package information, don't install
-    -h|--help       Show this help
-       --usage      Show a brief usage information
-    -V|--version    Show version information
-    -u|--uninstall  Uninstall package
-    -U|--update     Update package list
-    -r|--root       Print pak_root value
-    -m|--mirror     Get package from mirror"
+Action:
+    install - install package from local file, <package> is filename
+    get     - download package from mirror, don't install, <package> is package name
+    mirror  - download and install package, <package> is package name
+    update  - update mirror package index
+    upgrade - install newer versions of all upgradable packages
+    remove  - remove installed package, <package> is package name
+    pakroot - print value of pakroot variable
+    help    - Show this help screen and exit, do not parse options any further
+Options:
+    -f | --force    Ignore dependencies. Can \e[38mfuc\e[0m break everything
+    -h | --help     Same as 'help' action
+         --         Treat next options as filenames or package names
+                    It is an error to use this option before specifying an action
+Package:
+    Not necessarily a package name like one in package index, it depends on actions.
+    It is possible to provide a space-separated package list as one argument
+    For example, this command is absolutely valid:
+        pak mirror 'foo bar' baz
+    and will install packages 'foo', 'bar' and 'baz'
+"
+
+# Options and actions, filled by command line arguments
+
+o_help=none         # Show that kind of information and exit, 'none' means normal behavior
+o_names=""          # Space-separated list of filenames or package names
+o_ignore_depends=no # Ignore dependencies
+o_action=help       # Action
 
 # Functions
 die()
 {
     rm -rf "$temp_dir"
-    case $o_verbose in
-        silent)
-            false
-            ;;
-        *)
-            echo -e "\e[31mFatal error: $1\e[0m" >&2
-    esac
+    echo -e "\e[31mFatal error: $1\e[0m" >&2
     exit 1
 }
-
-output()
-{
-    case $o_verbose in
-        silent)
-            true
-            ;;
-        *)
-            if ([ x$2 == x-v ] && [ $o_verbose == verbose ]) || [ x$2 != x-v ]; then
-                echo -e "$1"
-            fi
-            ;;
-    esac
-}
-
 ask()
 {
-    case $o_verbose in
-        silent)
+    echo -e "$1"
+    read ans
+    case $ans in
+        y|yes|Y|Yes|YES)
             return 0
             ;;
         *)
-            output "$1"
-            read ans
-            case $ans in
-                y|yes|Y|Yes|YES)
-                    return 0
-                    ;;
-                *)
-                    return 1
-                    ;;
-            esac
+            return 1
             ;;
     esac
 }
@@ -88,19 +65,17 @@ ask()
 show_help()
 {
     case $o_help in
-        usage)
-            echo "$usage_string"
-            ;;
         help)
-            echo "$usage_string"
+            echo "$usage_string"    # TODO: legacy code, get rid of usage_string
             echo "$help_string"
             ;;
         version)
             echo "$version_string"
             ;;
-        root)
-            echo "$root"
+        pakroot)
+            echo "$pakroot"
             ;;
+        # No request for printing help message
         *)
             return 0
             ;;
@@ -108,57 +83,41 @@ show_help()
     return $help_exit_status
 }
 
+# Temporary variables
+
+t_all_names=no      # Interpret everything as a package or file name (if '--' option specified)
+t_was_action=no     # Set to 'yes' when action specifier is read
+
 # Parse args
-while [ x$1 != x ]; do
+while [ "a$1" != "a" ]; do
+
+    # If we treat all arguments as file/package names
+    if [ "a$t_all_names" == "ayes" ]; then
+        # Append file/package name to list
+        o_names="$o_names $1"
+        continue
+    fi
+
+    # If we meet a '--help' or similar options (and we don't treat them as file/package names)
     case $1 in
-        -g|--get)
-            o_get=yes
-            o_install=yes
-            o_help=no
-            ;;
-        -i|--install)
-            o_install=yes
-            o_get=no
-            o_help=no
-            ;;
-        -v|--verbose)
-            o_verbose=verbose
-            ;;
-        -q|--silent)
-            o_verbose=silent
-            ;;
-        -S|--show)
-            o_show=yes
-            o_install=no
-            o_help=no
-            ;;
         -h|--help)
-            o_install=no
-            o_get=no
             o_help=help
-            ;;
-        -r|--root)
-            o_install=no
-            o_get=no
-            o_help=root
-            ;;
-        --usage)
-            o_install=no
-            o_get=no
-            o_help=usage
+            show_help
+            exit $?
             ;;
         -V|--version)
             o_help=version
+            show_help
+            exit $?
             ;;
-        -u|--uninstall)
-            o_install=uninstall
-            o_help=no
-            ;;
-        -U|--update)
-            o_install=update
-            o_get=no
-            o_help=no
-            ;;
+    esac
+
+    echo "Option '$1': parsing not implemented"
+    exit $[1-2+3-4+5-6+7-8+9]       # :)
+
+    # TODO: implement other stuff
+    case $1 in
+
         -m|--mirror)
             o_install=yes
             o_get=mirror
@@ -175,6 +134,9 @@ while [ x$1 != x ]; do
     shift
 done
 
+# TODO
+echo "Next actions not implemented"
+exit 42
 
 #echo "Args:
 #  -g=$o_get
