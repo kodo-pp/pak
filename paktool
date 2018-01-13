@@ -1,0 +1,144 @@
+#!/bin/bash
+
+# Settings and options
+o_action=usage
+o_pkg=''
+
+root="`pak -r`"
+
+#temp_dir="/tmp/pak/download-$RANDOM-$RANDOM-$RANDOM-$RANDOM/"
+
+paklist_dir="$root/paklist.d"
+
+version="1.2+1 костыль edition"
+
+# String data
+version_string="PAKtool v $version"
+usage_string="Usage: $0 [-c|-i|-h|-l|-V|-R] [--create|--info|--help|--usage|--list|--version|--run] PACKAGE_NAME"
+help_string="
+    -c|--create     Create package from current directory
+    -i|--info       Show information about package
+    -v|--verbose    Be verbose
+    -h|--help       Show this help
+       --usage      Show a brief usage information
+    -l|--list       Show available packages list
+    -V|--version    Show version information
+    -R|--run        Run command inside the pakroot"
+
+# Functions
+die()
+{
+    echo -e "\e[31mFatal error: $1\e[0m" >&2
+    exit 1
+}
+
+output()
+{
+    echo -e "$1"
+}
+
+ask()
+{
+    case $o_verbose in
+        silent)
+            return 0
+            ;;
+        *)
+            output "$1"
+            read ans
+            case $ans in
+                y|yes|Y|Yes|YES)
+                    return 0
+                    ;;
+                *)
+                    return 1
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+show_help()
+{
+    case $o_action in
+        usage)
+            echo "$usage_string"
+            ;;
+        help)
+            echo "$usage_string"
+            echo "$help_string"
+            ;;
+        version)
+            echo "$version_string"
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+    return 0
+}
+
+# Parse args
+while [ "x$1" != x ]; do
+    case $1 in
+        -c|--create)
+            o_action=create
+            ;;
+        -i|--info)
+            die "--info option is not supported yet"
+            ;;
+        -h|--help)
+            o_action=help
+            ;;
+        --usage)
+            o_action=usage
+            ;;
+        -V|--version)
+            o_action=version
+            ;;
+        -l|--list)
+            o_action=list
+            ;;
+        -R|--run)
+            o_action=run
+            ;;
+        -*)
+            o_action=usage
+            ;;
+        *)
+            o_pkg="$1"
+            ;;
+    esac
+    shift
+done
+
+
+#echo "Args:
+#  -g=$o_get
+#  -i=$o_install
+#  -v=$o_verbose
+#  -h=$o_help
+#  -S=$o_show
+#"
+show_help || exit 1
+
+pak_fname="$o_pkg"
+
+case $o_action in
+    create)
+        output "Creating $pak_fname from files in current dircetory (files with names starting with '.' are not included)"
+        tar -cjvf "$pak_fname" ./* || die 'Failed to create'
+        output "Successfully created"
+        ;;
+    list)
+        if ! [ -d "$paklist_dir" ]; then
+            die "No such file or directory: $paklist_dir"
+        fi
+        for i in `ls "$paklist_dir"`; do
+            f="$paklist_dir/$i"
+            tail -n +2 "$f" | awk '{print $1}'
+        done | sort
+        ;;
+    run)
+        PATH="$root/:$root/bin:$root/usr/bin:$root/usr/local/bin:$root/sbin:$root/usr/sbin:$root/usr/local/sbin:$PATH" $pak_fname
+esac
