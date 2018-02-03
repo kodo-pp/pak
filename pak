@@ -10,7 +10,7 @@ help_exit_status=0
 version="2.0 [dev] buggy edition"
 version_string="PAK v $version"
 
-usage_string="Usage: $0 [options] <action> <package> [<package> ...]"
+usage_string="Usage: $0 [options] <action> [<package> [<package> ...]]"
 help_string="
 Action:
     install - install package from local file, <package> is filename
@@ -95,8 +95,61 @@ while [ "a$1" != "a" ]; do
     if [ "a$t_all_names" == "ayes" ]; then
         # Append file/package name to list
         o_names="$o_names $1"
+        shift
         continue
     fi
+
+    # Parse actions
+
+    #install - install package from local file, <package> is filename
+    #get     - download package from mirror, don't install, <package> is package name
+    #mirror  - download and install package, <package> is package name
+    #update  - update mirror package index
+    #upgrade - install newer versions of all upgradable packages
+    #remove  - remove installed package, <package> is package name
+    #pakroot - print value of pakroot variable
+    #help    - Show this help screen and exit, do not parse options any further
+
+    if [ "a$t_was_action" == "ano" ]; then
+        t_is_action_valid="yes"
+        case $1 in
+            install)
+                action=install
+                ;;
+            get)
+                action=get
+                ;;
+            mirror)
+                action=mirror
+                ;;
+            update)
+                action=update
+                ;;
+            upgrade)
+                action=upgrade
+                ;;
+            remove)
+                action=remove
+                ;;
+            pakroot)
+                o_help=pakroot
+                action=help
+                ;;
+            help)
+                o_help=help
+                action=help
+                ;;
+            *)
+                t_is_action_valid="no"
+        esac
+
+        if [ "a$t_is_action_valid" == "ayes" ]; then
+            t_was_action="yes"
+            shift
+            continue
+        fi
+    fi
+
 
     # If we meet a '--help' or similar options (and we don't treat them as file/package names)
     case $1 in
@@ -110,31 +163,31 @@ while [ "a$1" != "a" ]; do
             show_help
             exit $?
             ;;
-    esac
-
-    echo "Option '$1': parsing not implemented"
-    exit $[1-2+3-4+5-6+7-8+9]       # :)
-
-    # TODO: implement other stuff
-    case $1 in
-
-        -m|--mirror)
-            o_install=yes
-            o_get=mirror
-            o_help=no
-            ;;
-        -*)
-            o_help=usage
-            help_exit_status=1
-            ;;
-        *)
-            o_pkg="$1"
+        --)
+            t_all_names="yes"
+            shift
+            continue
             ;;
     esac
+
+    # Append file/package name to list
+    o_names="$o_names $1"
+
     shift
 done
 
+if [ "a$t_was_action" == "ano" ]; then
+    o_help=help
+    show_help
+    exit 1
+fi
+
+# Normalize $o_names a bit
+o_names="`echo $o_names | xargs echo -- | sed 's/^-- //g'`"
+
 # TODO
+echo "Action: $action"
+echo "Packages: $o_names"
 echo "Next actions not implemented"
 exit 42
 
