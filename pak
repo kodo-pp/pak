@@ -42,14 +42,12 @@ o_ignore_depends=no # Ignore dependencies
 o_action=help       # Action
 
 # Functions
-die()
-{
+die() {
     rm -rf "$temp_dir"
     echo -e "\e[31mFatal error: $1\e[0m" >&2
     exit 1
 }
-ask()
-{
+ask() {
     echo -e "$1"
     read ans
     case $ans in
@@ -62,8 +60,7 @@ ask()
     esac
 }
 
-show_help()
-{
+show_help() {
     case $o_help in
         help)
             echo -e "$usage_string"    # TODO: legacy code, get rid of usage_string
@@ -81,6 +78,46 @@ show_help()
             ;;
     esac
     return $help_exit_status
+}
+
+install_packages() {
+    if [ -z "$1" ]; then
+        help_exit_status=1 o_help=help show_help
+        exit 1
+    fi
+
+    echo "Going to install packages: "
+    for i in $1; do
+        echo "    $i"
+    done
+
+    if ! ask "Continue?"; then
+        echo "Aborting."
+        exit 1
+    fi
+
+    local cnt=0
+    for i in $1; do
+        install_package_file "$i" && (( ++cnt ))
+    done
+
+    echo "$cnt packages were successfully installed"
+}
+
+install_package_file() {
+    if ! [ -e $1 ]; then
+        echo "Installing package '$1' failed as file does not exist"
+        return 1
+    fi
+
+    local temp_pkgname="$RANDOM-$RANDOM.tar.unknown"
+    cp -- "$1" "$temp_dir/$temp_pkgname"
+    mkdir "$temp_dir/$temp_pkgname.d"
+    echo "Checking '$1'..."
+    tar -xf "$temp_dir/$temp_pkgname" -C "$temp_dir/$temp_pkgname.d/" .pak2/{deps,name} || (echo "Installation failed as package format is unknown"; return 1)
+    
+    echo "Unpacking '$1'..."
+    tar -xf "$temp_dir/$temp_pkgname" -C "$pakroot"
 }
 
 # Temporary variables
@@ -183,7 +220,7 @@ if [ "a$t_was_action" == "ano" ]; then
 fi
 
 # Normalize $o_names a bit
-o_names="`echo $o_names | xargs echo -- | sed 's/^-- //g'`"
+o_names="`echo $o_names | xargs echo -- | sed 's/^-- \?//g'`"
 
 # TODO
 echo "Action: $action"
@@ -191,18 +228,35 @@ echo "Packages: $o_names"
 echo "Next actions not implemented"
 exit 42
 
-#echo "Args:
-#  -g=$o_get
-#  -i=$o_install
-#  -v=$o_verbose
-#  -h=$o_help
-#  -S=$o_show
-#"
-show_help || exit 1
+if ! [ -d "$pakroot" ]; then
+    echo "Directory '$pakroot' (PAK root) is missing, creating..."
+    if ! mkdir -p "$pakroot"; then
+        die "unable to create PAK root directory"
+    fi
+fi
 
-pak_fname="$o_pkg"
-
-mkdir -p "$root"
+case $action in
+    install)
+        install_packages "$o_names"
+        ;;
+    get)
+        get_packages "$o_names"
+        ;;
+    mirror)
+        mirror_install_packages "$o_names"
+        ;;
+    update)
+        update_package_index
+        ;;
+    upgrade)
+        upgrade_packages "$o_names"
+        ;;
+    remove)
+        remove_packages "$o_names"
+        ;;
+    *)
+        die "invalid action: '$action'"
+esac
 
 case $o_get in
     yes)
