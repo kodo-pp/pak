@@ -4,6 +4,7 @@
 #pakroot="$HOME/pak-root"
 pakroot="$HOME/Projects/Personal/pak/pakroot-test"
 temp_dir="/tmp/pak/download-$RANDOM-$RANDOM-$RANDOM-$RANDOM/"
+pakconfig="/etc/pak"
 
 mkdir -p "$temp_dir"
 
@@ -43,6 +44,9 @@ o_help=none         # Show that kind of information and exit, 'none' means norma
 o_names=""          # Space-separated list of filenames or package names
 o_ignore_depends=no # Ignore dependencies
 o_action=help       # Action
+
+# State variables
+pkgpath=''
 
 # Functions
 die() {
@@ -84,6 +88,65 @@ show_help() {
 }
 
 is_installed() {
+    return 0
+}
+
+get_packages() {
+    if [ -z "$1" ]; then
+        help_exit_status=1 o_help=help show_help
+        exit 1
+    fi
+
+    echo "Going to download packages: "
+    for i in $1; do
+        echo "    $i"
+    done
+
+    if ! ask "Continue?"; then
+        echo "Aborting."
+        exit 1
+    fi
+
+    local cnt=0
+    for i in $1; do
+        get_package "$i" --current-dir && (( ++cnt ))
+    done
+
+    echo "$cnt packages were successfully downloaded"
+}
+
+get_package() {
+    mirror_list="$pakconfig/mirrors/"
+    url=""
+    for i in `ls "$mirror_list"`; do
+        s="`cat "$mirror_list/$i" | grep "^$1: "`"
+        #echo "s = [$s]"
+        if [ "x$s" != x ]; then
+            pak_url=`echo "$s" | awk '{print $2}'`
+            #echo "pu = [$pak_url]"
+            if [ "x$pak_url" == x ]; then
+                continue
+            else
+                break
+            fi
+        fi
+    done
+    #echo "[x$pak_url]"
+    if [ "x$pak_url" == x ]; then
+        echo "Package \`$o_pkg' not found in the mirror list"
+        return 1
+    fi
+    if [ "$2" == "--current-dir" ]; then
+        pkgpath="./$1.pak"
+    else
+        pkgpath="$temp_dir/$RANDOM-$RANDOM.pak"
+    fi
+    if wget -O "$pkgpath" -4 "$pak_url"; then
+        echo "    Downloaded"
+    else
+        echo "    Failed"
+        return 1
+    fi
     return 0
 }
 
