@@ -1,8 +1,11 @@
 #!/bin/bash
 
 # Configuration
-pakroot="$HOME/pak-root"
+#pakroot="$HOME/pak-root"
+pakroot="$HOME/Projects/Personal/pak/pakroot-test"
 temp_dir="/tmp/pak/download-$RANDOM-$RANDOM-$RANDOM-$RANDOM/"
+
+mkdir -p "$temp_dir"
 
 help_exit_status=0
 
@@ -43,7 +46,7 @@ o_action=help       # Action
 
 # Functions
 die() {
-    rm -rf "$temp_dir"
+    rm -ri "$temp_dir"
     echo -e "\e[31mFatal error: $1\e[0m" >&2
     exit 1
 }
@@ -80,6 +83,10 @@ show_help() {
     return $help_exit_status
 }
 
+is_installed() {
+    return 0
+}
+
 install_packages() {
     if [ -z "$1" ]; then
         help_exit_status=1 o_help=help show_help
@@ -105,7 +112,7 @@ install_packages() {
 }
 
 install_package_file() {
-    if ! [ -e $1 ]; then
+    if ! [ -e "$1" ]; then
         echo "Installing package '$1' failed as file does not exist"
         return 1
     fi
@@ -113,11 +120,29 @@ install_package_file() {
     local temp_pkgname="$RANDOM-$RANDOM.tar.unknown"
     cp -- "$1" "$temp_dir/$temp_pkgname"
     mkdir "$temp_dir/$temp_pkgname.d"
-    echo "Checking '$1'..."
+    echo "Parsing '$1'..."
     tar -xf "$temp_dir/$temp_pkgname" -C "$temp_dir/$temp_pkgname.d/" .pak2/{deps,name} || (echo "Installation failed as package format is unknown"; return 1)
-    
+    pkgname="`cat $temp_dir/$temp_pkgname.d/.pak2/name`"
+    for dep in `cat $temp_dir/$temp_pkgname.d/.pak2/deps`; do
+        if ! is_installed "$dep"; then
+            #mirror_install_packages "$dep"
+            echo "Need to install dependencies: `cat $temp_dir/$temp_pkgname.d/.pak2/deps`"
+            return 1
+        fi
+    done
+
     echo "Unpacking '$1'..."
-    tar -xf "$temp_dir/$temp_pkgname" -C "$pakroot"
+    local ret=0
+    tar -xf "$temp_dir/$temp_pkgname" -C "$temp_dir/$temp_pkgname.d" || ret=1
+    for i in `ls -A "$temp_dir/$temp_pkgname.d/files/"`; do
+        cp --preserve -v "$temp_dir/$temp_pkgname.d/files/$i" "$pakroot" || ret=1
+    done
+    if [ $ret != 0 ]; then
+        echo "    Failed"
+    else
+        echo "    Installed: $pkgname"
+    fi
+    return $ret
 }
 
 # Temporary variables
@@ -223,10 +248,10 @@ fi
 o_names="`echo $o_names | xargs echo -- | sed 's/^-- \?//g'`"
 
 # TODO
-echo "Action: $action"
-echo "Packages: $o_names"
-echo "Next actions not implemented"
-exit 42
+#echo "Action: $action"
+#echo "Packages: $o_names"
+#echo "Next actions not implemented"
+#exit 42
 
 if ! [ -d "$pakroot" ]; then
     echo "Directory '$pakroot' (PAK root) is missing, creating..."
@@ -257,6 +282,10 @@ case $action in
     *)
         die "invalid action: '$action'"
 esac
+
+rm -ri "$temp_dir"
+
+exit 86
 
 case $o_get in
     yes)
