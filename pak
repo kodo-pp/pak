@@ -133,15 +133,21 @@ get_package() {
     done
     #echo "[x$pak_url]"
     if [ "x$pak_url" == x ]; then
-        echo "Package \`$o_pkg' not found in the mirror list"
+        echo "Package '$1' not found in the mirror list"
         return 1
     fi
     if [ "$2" == "--current-dir" ]; then
         pkgpath="./$1.pak"
     else
-        pkgpath="$temp_dir/$RANDOM-$RANDOM.pak"
+        pkgpath="$temp_dir/$RANDOM-$RANDOM-$RANDOM.pak"
     fi
-    if wget -O "$pkgpath" -4 "$pak_url"; then
+
+    echo "Package $1"
+
+    # wget is too noisy
+    #if wget -q -O "$pkgpath" -4 "$pak_url"; then
+
+    if curl -L -# -4 -o "$pkgpath" "$pak_url"; then
         echo "    Downloaded"
     else
         echo "    Failed"
@@ -184,11 +190,15 @@ install_package_file() {
     cp -- "$1" "$temp_dir/$temp_pkgname"
     mkdir "$temp_dir/$temp_pkgname.d"
     echo "Parsing '$1'..."
-    tar -xf "$temp_dir/$temp_pkgname" -C "$temp_dir/$temp_pkgname.d/" .pak2/{deps,name} || (echo "Installation failed as package format is unknown"; return 1)
+    if ! tar -xf "$temp_dir/$temp_pkgname" -C "$temp_dir/$temp_pkgname.d/" .pak2/{deps,name}; then
+        echo "Installation failed as package format is unknown"
+        return 1
+    fi
     pkgname="`cat $temp_dir/$temp_pkgname.d/.pak2/name`"
     for dep in `cat $temp_dir/$temp_pkgname.d/.pak2/deps`; do
         if ! is_installed "$dep"; then
             #mirror_install_packages "$dep"
+            echo "pak: unimplemented:"
             echo "Need to install dependencies: `cat $temp_dir/$temp_pkgname.d/.pak2/deps`"
             return 1
         fi
@@ -206,6 +216,36 @@ install_package_file() {
         echo "    Installed: $pkgname"
     fi
     return $ret
+}
+
+mirror_install_packages() {
+    if [ -z "$1" ]; then
+        help_exit_status=1 o_help=help show_help
+        exit 1
+    fi
+
+    echo "Going to install packages: "
+    for i in $1; do
+        echo "    $i"
+    done
+
+    if ! ask "Continue?"; then
+        echo "Aborting."
+        exit 1
+    fi
+
+    local cnt=0
+    for i in $1; do
+        mirror_install_package_file "$i" && (( ++cnt ))
+    done
+
+    echo "$cnt packages were successfully installed"
+}
+
+mirror_install_package_file() {
+    get_package "$1" || return 1
+    install_package_file "$pkgpath" || return 2
+    return 0
 }
 
 # Temporary variables
