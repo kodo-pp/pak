@@ -22,7 +22,6 @@ Action:
     get     - download package from mirror, don't install, <package> is package name
     mirror  - download and install package, <package> is package name
     update  - update mirror package index
-    upgrade - install newer versions of all upgradable packages
     remove  - remove installed package, <package> is package name
     pakroot - print value of pakroot variable
     help    - Show this help screen and exit, do not parse options any further
@@ -381,7 +380,6 @@ while [ "a$1" != "a" ]; do
     #get     - download package from mirror, don't install, <package> is package name
     #mirror  - download and install package, <package> is package name
     #update  - update mirror package index
-    #upgrade - install newer versions of all upgradable packages
     #remove  - remove installed package, <package> is package name
     #pakroot - print value of pakroot variable
     #help    - Show this help screen and exit, do not parse options any further
@@ -400,9 +398,6 @@ while [ "a$1" != "a" ]; do
                 ;;
             update)
                 action=update
-                ;;
-            upgrade)
-                action=upgrade
                 ;;
             remove)
                 action=remove
@@ -461,12 +456,6 @@ fi
 # Normalize $o_names a bit
 o_names="`echo $o_names | xargs echo -- | sed 's/^-- \?//g'`"
 
-# TODO
-#echo "Action: $action"
-#echo "Packages: $o_names"
-#echo "Next actions not implemented"
-#exit 42
-
 if ! [ -d "$pakroot" ]; then
     echo "Directory '$pakroot' (PAK root) is missing, creating..."
     if ! mkdir -p "$pakroot"; then
@@ -487,9 +476,6 @@ case $action in
     update)
         update_package_lists
         ;;
-    upgrade)
-        upgrade_packages "$o_names"
-        ;;
     remove)
         remove_packages "$o_names"
         ;;
@@ -498,109 +484,3 @@ case $action in
 esac
 
 rm -r "$temp_dir"
-
-exit 86
-
-case $o_get in
-    yes)
-        pak_url="$o_pkg"
-        mkdir -p "$temp_dir" || die 'Unable to create temporary directory'
-        wget -O "$temp_dir/package.pak" "$pak_url" || die 'Unable to get the package'
-        pak_fname="$temp_dir/package.pak"
-        ;;
-    mirror)
-        pak_url=""
-        for i in `ls "$paklist_dir"`; do
-            s=`cat "$paklist_dir/$i" | egrep "^$o_pkg "`
-            #echo "s = [$s]"
-            if [ "x$s" != x ]; then
-                pak_url=`echo "$s" | awk '{print $2}'`
-                #echo "pu = [$pak_url]"
-                if [ "x$pak_url" == x ]; then
-                    continue
-                else
-                    break
-                fi
-            fi
-        done
-        #echo "[x$pak_url]"
-        if [ "x$pak_url" == x ]; then
-            die "Package \`$o_pkg' not found"
-        fi
-        mkdir -p "$temp_dir" || die 'Unable to create temporary directory'
-        wget -O "$temp_dir/package.pak" "$pak_url" || die 'Unable to get the package'
-        pak_fname="$temp_dir/package.pak"
-esac
-
-case $o_show in
-    yes)
-        output 'Contents:'
-        tar -tf "$pak_fname"
-        ;;
-esac
-
-case $o_install in
-    yes)
-        output "Installing $pak_fname"
-        if ! ask "Do you really want to install package?"; then
-            output 'Aborting'
-            rm -rf "$temp_dir"
-            exit 1;
-        fi
-        if tar -tf "$pak_fname" ./install.sh 2>/dev/null; then
-            tar -xf "$pak_fname" ./install.sh
-            output 'Running install.sh' -v
-            bash install.sh "$pak_fname" || die 'Failed to install'
-            rm install.sh
-        else
-            output "Unpacking to $root" -v
-            tar -xf "$pak_fname" -C "$root" || die 'Failed to install'
-        fi
-        output "Successfully installed"
-        rm -rf "$temp_dir"
-        ;;
-    uninstall)
-        output "Uninstalling $pak_fname"
-        if ! ask "Do you really want to uninstall package?"; then
-            output 'Aborting'
-            exit 1
-        fi
-        if tar -tf "$pak_fname" ./uninstall.sh 2>/dev/null; then
-            tar -xf "$pak_fname" ./uninstall.sh
-            output 'Running uninstall.sh' -v
-            bash uninstall.sh "$pak_fname" || die 'Failed to uninstall'
-            rm uninstall.sh
-        else
-            output "Going to remove:\n`tar -tf "$pak_fname" | sed "s#^#$root/#g"`"
-            if ! ask 'Continue?'; then
-                output 'Aborting'
-                exit 1
-            fi
-            (tar -tf "$pak_fname" | sed "s#^#$root/#g" | xargs rm) || die 'Failed to uninstall'
-        fi
-        output 'Successfully uninstalled'
-        ;;
-    update)
-        echo 'Updating package list'
-        if ! [ -d "$paklist_dir" ]; then
-            mkdir "$paklist_dir"
-        fi
-        case `ls "$paklist_dir" | wc -l` in
-            0)
-                echo "No lists to update"
-                exit 1
-                ;;
-        esac
-        for i in `ls "$paklist_dir"`; do
-            f="$paklist_dir/$i"
-            echo "Updating $f…"
-            lnk="`head -n 1 $f`"
-            if ! wget $lnk -O "$f.new"; then
-                echo -e "\e[31mUnable to update $f\e[0m"
-                continue
-            fi
-            mv "$f.new" "$f"
-            echo -e "\e[32m$f updated successfully\e[0m"
-        done
-        echo "Done"
-esac
