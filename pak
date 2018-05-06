@@ -259,9 +259,7 @@ install_package_file() {
 
     for dep in `cat $temp_dir/$temp_pkgname.d/.pak2/deps`; do
         if ! is_installed "$dep"; then
-            #mirror_install_packages "$dep"
-            echo "pak: unimplemented:"
-            echo "Need to install dependencies: `cat $temp_dir/$temp_pkgname.d/.pak2/deps`"
+            mirror_install_package_file "$dep" || echo "Required dependency '$dep' not found"
             return 1
         fi
     done
