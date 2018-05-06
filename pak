@@ -5,6 +5,7 @@
 pakroot="$HOME/Projects/Personal/pak/pakroot-test"
 temp_dir="/tmp/pak/download-$RANDOM-$RANDOM-$RANDOM-$RANDOM/"
 pakconfig="/etc/pak"
+pakvar="/var/pak"
 
 mkdir -p "$temp_dir"
 
@@ -50,7 +51,7 @@ pkgpath=''
 
 # Functions
 die() {
-    rm -ri "$temp_dir"
+    rm -r "$temp_dir"
     echo -e "\e[31mFatal error: $1\e[0m" >&2
     exit 1
 }
@@ -88,7 +89,21 @@ show_help() {
 }
 
 is_installed() {
-    return 0
+    cat "$pakvar/pak_index.txt" | grep -xFq "$1"
+    return $?
+}
+
+add_to_index() {
+    if ! is_installed "$1"; then
+        echo "$1" >> "$pakvar/pak_index.txt"
+    fi
+}
+
+remove_from_index() {
+    if is_installed "$1"; then
+        cat "$pakvar/pak_index.txt" | grep -xFv "$1" > "$pakvar/pak_index_tmp.txt"
+        mv "$pakvar/pak_index_tmp.txt" "$pakvar/pak_index.txt"
+    fi
 }
 
 get_packages() {
@@ -180,6 +195,49 @@ install_packages() {
     echo "$cnt packages were successfully installed"
 }
 
+
+remove_packages() {
+    if [ -z "$1" ]; then
+        help_exit_status=1 o_help=help show_help
+        exit 1
+    fi
+
+    echo "Going to remove packages: "
+    for i in $1; do
+        echo "    $i"
+    done
+
+    if ! ask "Continue?"; then
+        echo "Aborting."
+        exit 1
+    fi
+
+    local cnt=0
+    for i in $1; do
+        remove_package "$i" && (( ++cnt ))
+    done
+
+    echo "$cnt packages were successfully removed"
+}
+
+remove_package() {
+    echo "Removing package '$1'"
+    if ! is_installed "$1"; then
+        echo "Cannot remove package '$1': it is not installed"
+        return 1
+    fi
+    if ! [ -f "$pakvar/$1.files" ]; then
+        echo "Warning: cannot remove files of package '$i': file list is not present"
+        echo "Warning appended to log: '$pakvar/pak.log'"
+        echo "Warning: cannot remove files of package '$i': file list is not present" >> "$pakvar/pak.log"
+    else
+        cat "$pakvar/$1.files" | while read fil; do
+            rm -rf "$pakroot/$fil"
+        done
+    fi
+    remove_from_index "$1" || return 2
+}
+
 install_package_file() {
     if ! [ -e "$1" ]; then
         echo "Installing package '$1' failed as file does not exist"
@@ -195,6 +253,11 @@ install_package_file() {
         return 1
     fi
     pkgname="`cat $temp_dir/$temp_pkgname.d/.pak2/name`"
+
+    if is_installed "$pkgname"; then
+        echo "Warning: package '$pkgname' is already installed, upgrading..."
+    fi
+
     for dep in `cat $temp_dir/$temp_pkgname.d/.pak2/deps`; do
         if ! is_installed "$dep"; then
             #mirror_install_packages "$dep"
@@ -206,16 +269,64 @@ install_package_file() {
 
     echo "Unpacking '$1'..."
     local ret=0
+    if [ -f "$pakvar/$pkgname.files" ]; then
+        mv "$pakvar/$pkgname.files" "$pakvar/$pkgname.files.old"
+    fi
     tar -xf "$temp_dir/$temp_pkgname" -C "$temp_dir/$temp_pkgname.d" || ret=1
     for i in `ls -A "$temp_dir/$temp_pkgname.d/files/"`; do
-        cp --preserve -v "$temp_dir/$temp_pkgname.d/files/$i" "$pakroot" || ret=1
+        cp --preserve -r "$temp_dir/$temp_pkgname.d/files/$i" "$pakroot" || ret=1
+        echo "$i" >> "$pakvar/$pkgname.files"
     done
     if [ $ret != 0 ]; then
         echo "    Failed"
+        if [ -f "$pakvar/$pkgname.files.old" ]; then
+            mv "$pakvar/$pkgname.files.old" "$pakvar/$pkgname.files"
+        fi
     else
         echo "    Installed: $pkgname"
+        add_to_index "$pkgname"
+        if [ -f "$pakvar/$pkgname.files.old" ]; then
+            rm "$pakvar/$pkgname.files.old"
+        fi
     fi
     return $ret
+}
+
+update_package_lists() {
+    echo 'Updating package lists'
+    mirror_list="$pakconfig/mirrors/"
+    for i in `ls "$mirror_list"`; do
+        s="`cat "$mirror_list/$i" | grep "^$1: "`"
+        #echo "s = [$s]"
+        if [ "x$s" != x ]; then
+            pak_url=`echo "$s" | awk '{print $2}'`
+            #echo "pu = [$pak_url]"
+            if [ "x$pak_url" == x ]; then
+                continue
+            else
+                break
+            fi
+        fi
+    done
+    case `ls "$mirror_list" | wc -l` in
+        0)
+            echo "No lists to update"
+            return 1
+            ;;
+    esac
+    for i in `ls "$mirror_list"`; do
+        f="$mirror_list/$i"
+        echo "Updating $f…"
+        lnk="`head -n 1 $f`"
+        if ! wget -q "$lnk" -O "$f.new"; then
+            echo -e "Unable to update $f"
+            continue
+        fi
+        cp "$f" "$f.old"
+        mv "$f.new" "$f"
+        echo -e "$f updated successfully"
+    done
+    echo "Done"
 }
 
 mirror_install_packages() {
@@ -374,7 +485,7 @@ case $action in
         mirror_install_packages "$o_names"
         ;;
     update)
-        update_package_index
+        update_package_lists
         ;;
     upgrade)
         upgrade_packages "$o_names"
@@ -386,7 +497,7 @@ case $action in
         die "invalid action: '$action'"
 esac
 
-rm -ri "$temp_dir"
+rm -r "$temp_dir"
 
 exit 86
 
