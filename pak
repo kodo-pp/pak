@@ -2,7 +2,7 @@
 
 # Configuration
 #pakroot="$HOME/pak-root"
-pakroot="$HOME/Projects/Personal/pak/pakroot-test"
+pakroot="$HOME/pakroot"
 temp_dir="/tmp/pak/download-$RANDOM-$RANDOM-$RANDOM-$RANDOM/"
 pakconfig="/etc/pak"
 pakvar="/var/pak"
@@ -319,7 +319,7 @@ update_package_lists() {
             echo -e "Unable to update $f"
             continue
         fi
-        cp "$f" "$f.old"
+        cp "$f" "$pakconfig/backup/$i"
         mv "$f.new" "$f"
         echo -e "$f updated successfully"
     done
@@ -476,6 +476,18 @@ case $action in
         ;;
     remove)
         remove_packages "$o_names"
+        ;;
+    help)
+        case $o_help in
+            help)
+                show_help
+                exit
+                ;;
+            pakroot)
+                echo "$pakroot"
+                exit
+                ;;
+        esac
         ;;
     *)
         die "invalid action: '$action'"
