@@ -1,0 +1,40 @@
+.TH PAK 1
+.SH NAME
+pak \- package manager designed basically for shell scripts
+.SH SYNOPSYS
+.B pak
+[options] <\fIaction\fR> [\fIpackage\fR [\fIpackage\fR ...] ]
+.SH DESCRIPTION
+Install, download or remove PAK packages
+.SH OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Show help and exit
+.TP
+.BR \-V ", " \-\-version
+Show version information and exit
+.SH ACTIONS
+.TP 10
+.BR install 
+install package from local file, \fIpackage\fR is filename
+.TP 
+.BR get     
+download package from mirror, don't install, \fIpackage\fR is package name
+.TP
+.BR mirror  
+download and install package, \fIpackage\fR is package name
+.TP
+.BR update  
+update mirror package index
+.TP
+.BR remove  
+remove installed package, \fIpackage\fR is package name
+.TP
+.BR list    
+list all available packages
+.TP
+.BR pakroot 
+print value of pakroot variable
+.TP
+.BR help    
+Show this help screen and exit, do not parse options any further
