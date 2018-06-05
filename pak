@@ -12,7 +12,7 @@ mkdir -p "$temp_dir"
 help_exit_status=0
 
 # String data
-version="2.0 [beta] buggy edition"
+version="2.0.1 [beta] buggy edition"
 version_string="PAK v $version"
 
 usage_string="Usage: $0 [options] <action> [<package> [<package> ...]]"
@@ -23,10 +23,10 @@ Action:
     mirror  - download and install package, <package> is package name
     update  - update mirror package index
     remove  - remove installed package, <package> is package name
+    list    - list all available packages
     pakroot - print value of pakroot variable
     help    - Show this help screen and exit, do not parse options any further
 Options:
-    -f | --force    Ignore dependencies. Can \e[9mfuc\e[0m break everything
     -h | --help     Same as 'help' action
          --         Treat next options as filenames or package names
                     It is an error to use this option before specifying an action
@@ -129,15 +129,29 @@ get_packages() {
     echo "$cnt packages were successfully downloaded"
 }
 
+list_packages() {
+    mirror_list="$pakconfig/mirrors/"
+    url=""
+    for i in `ls "$mirror_list"`; do
+        cat "$mirror_list/$i" | tail -n +2 | sed 's/: .*$//g' | while read pkgname; do
+            if is_installed "$pkgname"; then
+                echo -n "$pkgname"
+                echo -ne " \e[1;32m[Installed]\e[0m" >&2
+                echo
+            else
+                echo "$pkgname"
+            fi
+        done
+    done
+}
+
 get_package() {
     mirror_list="$pakconfig/mirrors/"
     url=""
     for i in `ls "$mirror_list"`; do
         s="`cat "$mirror_list/$i" | grep "^$1: "`"
-        #echo "s = [$s]"
         if [ "x$s" != x ]; then
             pak_url=`echo "$s" | awk '{print $2}'`
-            #echo "pu = [$pak_url]"
             if [ "x$pak_url" == x ]; then
                 continue
             else
@@ -145,7 +159,6 @@ get_package() {
             fi
         fi
     done
-    #echo "[x$pak_url]"
     if [ "x$pak_url" == x ]; then
         echo "Package '$1' not found in the mirror list"
         return 1
@@ -405,6 +418,9 @@ while [ "a$1" != "a" ]; do
             remove)
                 action=remove
                 ;;
+            list)
+                action=list
+                ;;
             pakroot)
                 o_help=pakroot
                 action=help
@@ -481,6 +497,9 @@ case $action in
         ;;
     remove)
         remove_packages "$o_names"
+        ;;
+    list)
+        list_packages
         ;;
     help)
         case $o_help in
