@@ -2,7 +2,7 @@
 
 # Configuration
 #pakroot="$HOME/pak-root"
-pakroot="$HOME/pakroot"
+pakroot="/"
 temp_dir="/tmp/pak/download-$RANDOM-$RANDOM-$RANDOM-$RANDOM/"
 pakconfig="/etc/pak"
 pakvar="/var/pak"
@@ -12,7 +12,7 @@ mkdir -p "$temp_dir"
 help_exit_status=0
 
 # String data
-version="2.0 [dev] buggy edition"
+version="2.0 [beta] buggy edition"
 version_string="PAK v $version"
 
 usage_string="Usage: $0 [options] <action> [<package> [<package> ...]]"
@@ -231,7 +231,8 @@ remove_package() {
         echo "Warning: cannot remove files of package '$i': file list is not present" >> "$pakvar/pak.log"
     else
         cat "$pakvar/$1.files" | while read fil; do
-            rm -rf "$pakroot/$fil"
+            rm -rv "$pakroot/$fil"
+            #echo rm -ri "$pakroot/$fil"
         done
     fi
     remove_from_index "$1" || return 2
@@ -259,8 +260,10 @@ install_package_file() {
 
     for dep in `cat $temp_dir/$temp_pkgname.d/.pak2/deps`; do
         if ! is_installed "$dep"; then
-            mirror_install_package_file "$dep" || echo "Required dependency '$dep' not found"
-            return 1
+            if ! mirror_install_package_file "$dep"; then
+                echo "Required dependency '$dep' not found"
+                return 1
+            fi
         fi
     done
 
@@ -271,8 +274,10 @@ install_package_file() {
     fi
     tar -xf "$temp_dir/$temp_pkgname" -C "$temp_dir/$temp_pkgname.d" || ret=1
     for i in `ls -A "$temp_dir/$temp_pkgname.d/files/"`; do
-        cp --preserve -r "$temp_dir/$temp_pkgname.d/files/$i" "$pakroot" || ret=1
-        echo "$i" >> "$pakvar/$pkgname.files"
+        cp --preserve --no-preserve=owner -r "$temp_dir/$temp_pkgname.d/files/$i" "$pakroot" || ret=1
+    done
+    for i in `find "$temp_dir/$temp_pkgname.d/files/" -type f`; do
+        echo "$i" | sed "s#^$temp_dir/$temp_pkgname.d/files##g" >> "$pakvar/$pkgname.files"
     done
     if [ $ret != 0 ]; then
         echo "    Failed"
