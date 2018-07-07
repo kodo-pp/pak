@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -e
+
 # Configuration
 #pakroot="$HOME/pak-root"
 pakroot="/"
@@ -344,11 +346,36 @@ update_package_lists() {
     echo "Done"
 }
 
+check_exist_package() {
+    mirror_list="$pakconfig/mirrors/"
+    url=""
+    for i in `ls "$mirror_list"`; do
+        cat "$mirror_list/$i" | tail -n +2 | sed 's/: .*$//g' | while read pkgname; do
+            if [[ "$pkgname" == "$1" ]]; then
+                echo yes
+                return 0
+            fi
+        done
+    done
+    echo no
+}
+
+check_exist_packages() {
+    for j in $1; do
+        if [[ "$(check_exist_package "$j")" == "no" ]]; then
+            echo "Unable to find package '$j' in mirror list"
+            exit 1
+        fi
+    done
+}
+
 mirror_install_packages() {
     if [ -z "$1" ]; then
         help_exit_status=1 o_help=help show_help
         exit 1
     fi
+
+    check_exist_packages $1
 
     echo "Going to install packages: "
     for i in $1; do
