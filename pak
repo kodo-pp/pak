@@ -312,19 +312,6 @@ install_package_file() {
 update_package_lists() {
     echo 'Updating package lists'
     mirror_list="$pakconfig/mirrors/"
-    for i in `ls "$mirror_list"`; do
-        s="`cat "$mirror_list/$i" | grep "^$1: "`"
-        #echo "s = [$s]"
-        if [ "x$s" != x ]; then
-            pak_url=`echo "$s" | awk '{print $2}'`
-            #echo "pu = [$pak_url]"
-            if [ "x$pak_url" == x ]; then
-                continue
-            else
-                break
-            fi
-        fi
-    done
     case `ls "$mirror_list" | wc -l` in
         0)
             echo "No lists to update"
