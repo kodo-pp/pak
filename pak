@@ -14,7 +14,7 @@ mkdir -p "$temp_dir"
 help_exit_status=0
 
 # String data
-version="2.0.1 [beta] buggy edition"
+version="2.1 [beta] faily"
 version_string="PAK v $version"
 
 usage_string="Usage: $0 [options] <action> [<package> [<package> ...]]"
@@ -30,6 +30,7 @@ Action:
     help    - Show this help screen and exit, do not parse options any further
 Options:
     -h | --help     Same as 'help' action
+    -V | --version  Show version information and exit
          --         Treat next options as filenames or package names
                     It is an error to use this option before specifying an action
 Package:
@@ -282,6 +283,37 @@ install_package_file() {
         fi
     done
 
+    if tar -tf "$temp_dir/$temp_pkgname" .pak2/license; then
+        tar -xf "$temp_dir/$temp_pkgname" -C "$temp_dir/$temp_pkgname.d/" .pak2/license
+        local pager=cat
+        if [[ "$(cat "$temp_dir/$temp_pkgname.d/.pak2/license" | wc -l)" -gt $(( "$(tput lines)" - 5 )) ]]; then
+            pager=${PAGER:-less}
+        fi
+
+        {
+            echo "You have to accept the following license to install the package."
+            echo "This license will be installed at $pakvar/licenses/$pkgname/LICENSE."
+            echo "--- START LICENSE TEXT ---"
+            cat "$temp_dir/$temp_pkgname.d/.pak2/license"
+            echo "---  END LICENSE TEXT  ---"
+        } | "$pager"
+        echo "Do you accept this license?"
+        echo -n "[y/N]: "
+        read ans
+        if [[ "$ans" == "y" ]]; then
+            echo "License accepted"
+        elif [[ "$ans" == "n" ]]; then
+            echo "License not accepted, package will not be installed"
+            return 1
+        else
+            echo "(assumed no)"
+            echo "License not accepted, package will not be installed"
+            return 1
+        fi
+        echo "Installing license..."
+        mkdir -p "$pakvar/licenses/$pkgname/"
+        cp "$temp_dir/$temp_pkgname.d/.pak2/license" "$pakvar/licenses/$pkgname/LICENSE"
+    fi
     echo "Unpacking '$1'..."
     local ret=0
     if [ -f "$pakvar/$pkgname.files" ]; then
