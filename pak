@@ -5,16 +5,18 @@ set -e
 # Configuration
 #pakroot="$HOME/pak-root"
 pakroot="/"
-temp_dir="/tmp/pak/download-$RANDOM-$RANDOM-$RANDOM-$RANDOM/"
+temp_base_dir="/tmp/pak"
+temp_dir="$temp_base_dir/download-$RANDOM-$RANDOM-$RANDOM-$RANDOM/"
 pakconfig="/etc/pak"
 pakvar="/var/pak"
 
 mkdir -p "$temp_dir"
+chmod a+rwt "$temp_base_dir" 2>/dev/null || true
 
 help_exit_status=0
 
 # String data
-version="2.1 [beta] faily"
+version="2.2 [beta] ugly"
 version_string="PAK v $version"
 
 usage_string="Usage: $0 [options] <action> [<package> [<package> ...]]"
@@ -283,7 +285,7 @@ install_package_file() {
         fi
     done
 
-    if tar -tf "$temp_dir/$temp_pkgname" .pak2/license; then
+    if tar -tf "$temp_dir/$temp_pkgname" .pak2/license 2>/dev/null; then
         tar -xf "$temp_dir/$temp_pkgname" -C "$temp_dir/$temp_pkgname.d/" .pak2/license
         local pager=cat
         if [[ "$(cat "$temp_dir/$temp_pkgname.d/.pak2/license" | wc -l)" -gt $(( "$(tput lines)" - 5 )) ]]; then
