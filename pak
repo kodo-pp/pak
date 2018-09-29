@@ -15,7 +15,7 @@ chmod a+rwt "$temp_base_dir" 2>/dev/null || true
 help_exit_status=0
 
 # String data
-version="2.3 [beta] stupid"
+version="2.3.1 stupid"
 version_string="PAK v $version"
 
 usage_string="Usage: $0 [options] <action> [<package> [<package> ...]]"
