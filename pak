@@ -301,7 +301,7 @@ function install_package_file() {
             echo "This license will be installed at $pakvar/licenses/$pkgname/LICENSE."
             echo -e "\e[1m--- START LICENSE TEXT ---\e[0m"
             cat "$temp_dir/$temp_pkgname.d/.pak2/license"
-            echo "\e[1m---  END LICENSE TEXT  ---\e[0m"
+            echo -e "\e[1m---  END LICENSE TEXT  ---\e[0m"
         } | "$pager"
         echo "Do you accept this license?"
         echo -n "[y/N]: "
