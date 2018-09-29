@@ -1,0 +1,12 @@
+pak_name='pak-updates'
+pak_depends=()
+pak_license_file='LICENSE'
+
+pak_package() {
+    mkdir -p "$PAK_PKGDIR"{/usr/bin,/usr/share/man/man1,/var/pak,/etc/pak/backups,/etc/pak/mirrors,/etc/bash_completion.d}
+    cp ./pak "$PAK_PKGDIR/usr/bin"
+    cp ./pak "$PAK_PKGDIR/usr/bin/pak2"
+    cat ./pak.1 | gzip > "$PAK_PKGDIR/usr/share/man/man1/pak.1.gz"
+    cat ./pak.1 | gzip > "$PAK_PKGDIR/usr/share/man/man1/pak2.1.gz"
+    cp ./completion/pak.sh "$PAK_PKGDIR/etc/bash_completion.d/pak.sh"
+}

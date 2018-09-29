@@ -3,12 +3,11 @@
 set -e
 
 # Configuration
-#pakroot="$HOME/pak-root"
-pakroot="/"
-temp_base_dir="/tmp/pak"
+pakroot="${pakroot:-"/"}"
+temp_base_dir="${temp_base_dir:-"/tmp/pak"}"
 temp_dir="$temp_base_dir/download-$RANDOM-$RANDOM-$RANDOM-$RANDOM/"
-pakconfig="/etc/pak"
-pakvar="/var/pak"
+pakconfig="${pakconfig:-"/etc/pak"}"
+pakvar="${pakvar:-"/var/pak"}"
 
 mkdir -p "$temp_dir"
 chmod a+rwt "$temp_base_dir" 2>/dev/null || true
@@ -16,7 +15,7 @@ chmod a+rwt "$temp_base_dir" 2>/dev/null || true
 help_exit_status=0
 
 # String data
-version="2.2 [beta] ugly"
+version="2.3 [beta] stupid"
 version_string="PAK v $version"
 
 usage_string="Usage: $0 [options] <action> [<package> [<package> ...]]"
@@ -54,13 +53,14 @@ o_action=help       # Action
 pkgpath=''
 
 # Functions
-die() {
+function die() {
     rm -r "$temp_dir"
     echo -e "\e[31mFatal error: $1\e[0m" >&2
     exit 1
 }
-ask() {
-    echo -e "$1"
+function ask() {
+    echo -ne "$1"
+    local ans
     read ans
     case $ans in
         y|yes|Y|Yes|YES)
@@ -72,7 +72,7 @@ ask() {
     esac
 }
 
-show_help() {
+function show_help() {
     case $o_help in
         help)
             echo -e "$usage_string"    # TODO: legacy code, get rid of usage_string
@@ -92,56 +92,61 @@ show_help() {
     return $help_exit_status
 }
 
-is_installed() {
-    cat "$pakvar/pak_index.txt" | grep -xFq "$1"
-    return $?
+function is_installed() {
+    if grep -xFq "$pakvar/pak_index.txt" -e "$1"; then
+        return 0
+    else
+        return 1
+    fi
 }
 
-add_to_index() {
+function add_to_index() {
     if ! is_installed "$1"; then
         echo "$1" >> "$pakvar/pak_index.txt"
     fi
 }
 
-remove_from_index() {
+function remove_from_index() {
     if is_installed "$1"; then
         cat "$pakvar/pak_index.txt" | grep -xFv "$1" > "$pakvar/pak_index_tmp.txt"
         mv "$pakvar/pak_index_tmp.txt" "$pakvar/pak_index.txt"
     fi
 }
 
-get_packages() {
-    if [ -z "$1" ]; then
+function get_packages() {
+    if [[ -z "$1" ]]; then
         help_exit_status=1 o_help=help show_help
         exit 1
     fi
 
     echo "Going to download packages: "
+    local i
     for i in $1; do
         echo "    $i"
     done
 
-    if ! ask "Continue?"; then
+    if ! ask "Continue? [y/n] "; then
         echo "Aborting."
         exit 1
     fi
 
-    local cnt=0
     for i in $1; do
-        get_package "$i" --current-dir && (( ++cnt ))
+        if ! get_package "$i" --current-dir; then
+            echo "Error: failed to download package '$i'"
+            exit 1
+        fi
     done
-
-    echo "$cnt packages were successfully downloaded"
 }
 
-list_packages() {
-    mirror_list="$pakconfig/mirrors/"
-    url=""
-    for i in `ls "$mirror_list"`; do
+function list_packages() {
+    local mirror_list="$pakconfig/mirrors/"
+    local url=""
+    local i
+    for i in $(ls "$mirror_list"); do
         cat "$mirror_list/$i" | tail -n +2 | sed 's/: .*$//g' | while read pkgname; do
             if is_installed "$pkgname"; then
                 echo -n "$pkgname"
-                echo -ne " \e[1;32m[Installed]\e[0m" >&2
+                echo -ne " \e[32m[Installed]\e[0m" >&2
                 echo
             else
                 echo "$pkgname"
@@ -150,132 +155,131 @@ list_packages() {
     done
 }
 
-get_package() {
-    mirror_list="$pakconfig/mirrors/"
-    url=""
-    for i in `ls "$mirror_list"`; do
-        s="`cat "$mirror_list/$i" | grep "^$1: "`"
-        if [ "x$s" != x ]; then
-            pak_url=`echo "$s" | awk '{print $2}'`
-            if [ "x$pak_url" == x ]; then
+function get_package() {
+    local mirror_list="$pakconfig/mirrors/"
+    local url=""
+    local i
+    for i in $(ls "$mirror_list"); do
+        local s="$(cat "$mirror_list/$i" | grep "^$1: ")"
+        if [[ -n "$s" ]]; then
+            local pak_url="$(echo "$s" | awk '{print $2}')"
+            if [[ -z "$pak_url" ]]; then
                 continue
             else
                 break
             fi
         fi
     done
-    if [ "x$pak_url" == x ]; then
+    if [[ -z "$pak_url" ]]; then
         echo "Package '$1' not found in the mirror list"
         return 1
     fi
-    if [ "$2" == "--current-dir" ]; then
-        pkgpath="./$1.pak"
+    if [[ "$2" == "--current-dir" ]]; then
+        declare -g pkgpath="./$1.pak"
     else
-        pkgpath="$temp_dir/$RANDOM-$RANDOM-$RANDOM.pak"
+        declare -g pkgpath="$temp_dir/$RANDOM-$RANDOM-$RANDOM.pak"
     fi
 
-    echo "Package $1"
+    echo "Downloading $1..."
 
-    # wget is too noisy
-    #if wget -q -O "$pkgpath" -4 "$pak_url"; then
-
-    if curl -L -# -4 -o "$pkgpath" "$pak_url"; then
-        echo "    Downloaded"
-    else
-        echo "    Failed"
+    if ! curl -L -o "$pkgpath" "$pak_url"; then
+        echo "Failed to download $1"
         return 1
     fi
     return 0
 }
 
-install_packages() {
-    if [ -z "$1" ]; then
+function install_packages() {
+    if [[ -z "$1" ]]; then
         help_exit_status=1 o_help=help show_help
         exit 1
     fi
 
     echo "Going to install packages: "
+    local i
     for i in $1; do
         echo "    $i"
     done
 
-    if ! ask "Continue?"; then
+    if ! ask "Continue? [y/n] "; then
         echo "Aborting."
         exit 1
     fi
 
-    local cnt=0
     for i in $1; do
-        install_package_file "$i" && (( ++cnt ))
+        if ! install_package_file "$i"; then
+            echo "Failed to install $i"
+            exit 1
+        fi
     done
-
-    echo "$cnt packages were successfully installed"
 }
 
-
-remove_packages() {
-    if [ -z "$1" ]; then
+function remove_packages() {
+    if [[ -z "$1" ]]; then
         help_exit_status=1 o_help=help show_help
         exit 1
     fi
 
     echo "Going to remove packages: "
+    local i
     for i in $1; do
         echo "    $i"
     done
 
-    if ! ask "Continue?"; then
+    if ! ask "Continue? [y/n] "; then
         echo "Aborting."
         exit 1
     fi
 
     local cnt=0
     for i in $1; do
-        remove_package "$i" && (( ++cnt ))
+        if ! remove_package "$i"; then
+            echo "Failed to remove $i"
+            exit 1
+        fi
     done
-
-    echo "$cnt packages were successfully removed"
 }
 
-remove_package() {
-    echo "Removing package '$1'"
+function remove_package() {
+    echo "Removing '$1'"
     if ! is_installed "$1"; then
         echo "Cannot remove package '$1': it is not installed"
         return 1
     fi
-    if ! [ -f "$pakvar/$1.files" ]; then
+    if ! [[ -f "$pakvar/$1.files" ]]; then
         echo "Warning: cannot remove files of package '$i': file list is not present"
         echo "Warning appended to log: '$pakvar/pak.log'"
         echo "Warning: cannot remove files of package '$i': file list is not present" >> "$pakvar/pak.log"
     else
+        local fil
         cat "$pakvar/$1.files" | while read fil; do
-            rm -rv "$pakroot/$fil"
-            #echo rm -ri "$pakroot/$fil"
+            rm -r "$pakroot/$fil"
         done
     fi
     remove_from_index "$1" || return 2
 }
 
-install_package_file() {
-    if ! [ -e "$1" ]; then
-        echo "Installing package '$1' failed as file does not exist"
+function install_package_file() {
+    if ! [[ -e "$1" ]]; then
+        echo "Installing package '$1' failed: file does not exist"
         return 1
     fi
 
     local temp_pkgname="$RANDOM-$RANDOM.tar.unknown"
     cp -- "$1" "$temp_dir/$temp_pkgname"
     mkdir "$temp_dir/$temp_pkgname.d"
-    echo "Parsing '$1'..."
     if ! tar -xf "$temp_dir/$temp_pkgname" -C "$temp_dir/$temp_pkgname.d/" .pak2/{deps,name}; then
         echo "Installation failed as package format is unknown"
         return 1
     fi
-    pkgname="`cat $temp_dir/$temp_pkgname.d/.pak2/name`"
+    local pkgname="$(cat $temp_dir/$temp_pkgname.d/.pak2/name)"
 
+    echo "Installing ${pkgname}..."
     if is_installed "$pkgname"; then
-        echo "Warning: package '$pkgname' is already installed, upgrading..."
+        echo "Warning: package '$pkgname' is already installed, reinstalling..."
     fi
 
+    local dep
     for dep in `cat $temp_dir/$temp_pkgname.d/.pak2/deps`; do
         if ! is_installed "$dep"; then
             if ! mirror_install_package_file "$dep"; then
@@ -285,7 +289,7 @@ install_package_file() {
         fi
     done
 
-    if tar -tf "$temp_dir/$temp_pkgname" .pak2/license 2>/dev/null; then
+    if tar -tf "$temp_dir/$temp_pkgname" .pak2/license >/dev/null 2>/dev/null; then
         tar -xf "$temp_dir/$temp_pkgname" -C "$temp_dir/$temp_pkgname.d/" .pak2/license
         local pager=cat
         if [[ "$(cat "$temp_dir/$temp_pkgname.d/.pak2/license" | wc -l)" -gt $(( "$(tput lines)" - 5 )) ]]; then
@@ -295,12 +299,13 @@ install_package_file() {
         {
             echo "You have to accept the following license to install the package."
             echo "This license will be installed at $pakvar/licenses/$pkgname/LICENSE."
-            echo "--- START LICENSE TEXT ---"
+            echo -e "\e[1m--- START LICENSE TEXT ---\e[0m"
             cat "$temp_dir/$temp_pkgname.d/.pak2/license"
-            echo "---  END LICENSE TEXT  ---"
+            echo "\e[1m---  END LICENSE TEXT  ---\e[0m"
         } | "$pager"
         echo "Do you accept this license?"
         echo -n "[y/N]: "
+        local ans
         read ans
         if [[ "$ans" == "y" ]]; then
             echo "License accepted"
@@ -316,61 +321,68 @@ install_package_file() {
         mkdir -p "$pakvar/licenses/$pkgname/"
         cp "$temp_dir/$temp_pkgname.d/.pak2/license" "$pakvar/licenses/$pkgname/LICENSE"
     fi
-    echo "Unpacking '$1'..."
+    echo "Unpacking '$pkgname'..."
     local ret=0
     if [ -f "$pakvar/$pkgname.files" ]; then
         mv "$pakvar/$pkgname.files" "$pakvar/$pkgname.files.old"
     fi
     tar -xf "$temp_dir/$temp_pkgname" -C "$temp_dir/$temp_pkgname.d" || ret=1
+    local i
     for i in `ls -A "$temp_dir/$temp_pkgname.d/files/"`; do
         cp --preserve --no-preserve=owner -r "$temp_dir/$temp_pkgname.d/files/$i" "$pakroot" || ret=1
     done
     for i in `find "$temp_dir/$temp_pkgname.d/files/" -type f`; do
         echo "$i" | sed "s#^$temp_dir/$temp_pkgname.d/files##g" >> "$pakvar/$pkgname.files"
     done
-    if [ $ret != 0 ]; then
-        echo "    Failed"
+    if [[ $ret != 0 ]]; then
+        echo "Failed to install package '${pkgname}'"
         if [ -f "$pakvar/$pkgname.files.old" ]; then
             mv "$pakvar/$pkgname.files.old" "$pakvar/$pkgname.files"
         fi
     else
-        echo "    Installed: $pkgname"
         add_to_index "$pkgname"
-        if [ -f "$pakvar/$pkgname.files.old" ]; then
+        if [[ -f "$pakvar/$pkgname.files.old" ]]; then
             rm "$pakvar/$pkgname.files.old"
         fi
     fi
     return $ret
 }
 
-update_package_lists() {
+function update_package_lists() {
     echo 'Updating package lists'
-    mirror_list="$pakconfig/mirrors/"
-    case `ls "$mirror_list" | wc -l` in
+    local mirror_list="$pakconfig/mirrors/"
+    case $(ls "$mirror_list" | wc -l) in
         0)
             echo "No lists to update"
             return 1
             ;;
     esac
-    for i in `ls "$mirror_list"`; do
-        f="$mirror_list/$i"
-        echo "Updating $f…"
-        lnk="`head -n 1 $f`"
+    local i
+    for i in $(ls "$mirror_list"); do
+        local f="$mirror_list/$i"
+        case "$f" in
+            *.new)
+                continue
+                ;;
+        esac
+        echo "Updating..."
+        local lnk="$(head -n 1 $f)"
         if ! wget -q "$lnk" -O "$f.new"; then
             echo -e "Unable to update $f"
             continue
         fi
         cp "$f" "$pakconfig/backup/$i"
         mv "$f.new" "$f"
-        echo -e "$f updated successfully"
     done
     echo "Done"
 }
 
-check_exist_package() {
-    mirror_list="$pakconfig/mirrors/"
-    url=""
-    for i in `ls "$mirror_list"`; do
+function check_exist_package() {
+    local mirror_list="$pakconfig/mirrors/"
+    local url=""
+    local i
+    for i in $(ls "$mirror_list"); do
+        local pkgname
         cat "$mirror_list/$i" | tail -n +2 | sed 's/: .*$//g' | while read pkgname; do
             if [[ "$pkgname" == "$1" ]]; then
                 echo yes
@@ -381,7 +393,8 @@ check_exist_package() {
     echo no
 }
 
-check_exist_packages() {
+function check_exist_packages() {
+    local j
     for j in $1; do
         if [[ "$(check_exist_package "$j")" == "no" ]]; then
             echo "Unable to find package '$j' in mirror list"
@@ -390,8 +403,8 @@ check_exist_packages() {
     done
 }
 
-mirror_install_packages() {
-    if [ -z "$1" ]; then
+function mirror_install_packages() {
+    if [[ -z "$1" ]]; then
         help_exit_status=1 o_help=help show_help
         exit 1
     fi
@@ -399,24 +412,26 @@ mirror_install_packages() {
     check_exist_packages $1
 
     echo "Going to install packages: "
+    local i
     for i in $1; do
         echo "    $i"
     done
 
-    if ! ask "Continue?"; then
+    if ! ask "Continue? [y/n] "; then
         echo "Aborting."
         exit 1
     fi
 
     local cnt=0
     for i in $1; do
-        mirror_install_package_file "$i" && (( ++cnt ))
+        if ! mirror_install_package_file "$i"; then
+            echo "Failed to install package from file '$i'"
+            exit 1
+        fi
     done
-
-    echo "$cnt packages were successfully installed"
 }
 
-mirror_install_package_file() {
+function mirror_install_package_file() {
     get_package "$1" || return 1
     install_package_file "$pkgpath" || return 2
     return 0
@@ -428,10 +443,9 @@ t_all_names=no      # Interpret everything as a package or file name (if '--' op
 t_was_action=no     # Set to 'yes' when action specifier is read
 
 # Parse args
-while [ "a$1" != "a" ]; do
-
+while [[ -n "$1" ]]; do
     # If we treat all arguments as file/package names
-    if [ "a$t_all_names" == "ayes" ]; then
+    if [[ "$t_all_names" == "yes" ]]; then
         # Append file/package name to list
         o_names="$o_names $1"
         shift
@@ -440,15 +454,15 @@ while [ "a$1" != "a" ]; do
 
     # Parse actions
 
-    #install - install package from local file, <package> is filename
-    #get     - download package from mirror, don't install, <package> is package name
-    #mirror  - download and install package, <package> is package name
-    #update  - update mirror package index
-    #remove  - remove installed package, <package> is package name
-    #pakroot - print value of pakroot variable
-    #help    - Show this help screen and exit, do not parse options any further
+    # install - install package from local file, <package> is filename
+    # get     - download package from mirror, don't install, <package> is package name
+    # mirror  - download and install package, <package> is package name
+    # update  - update mirror package index
+    # remove  - remove installed package, <package> is package name
+    # pakroot - print value of pakroot variable
+    # help    - Show this help screen and exit, do not parse options any further
 
-    if [ "a$t_was_action" == "ano" ]; then
+    if [[ "$t_was_action" == "no" ]]; then
         t_is_action_valid="yes"
         case $1 in
             install)
@@ -481,7 +495,7 @@ while [ "a$1" != "a" ]; do
                 t_is_action_valid="no"
         esac
 
-        if [ "a$t_is_action_valid" == "ayes" ]; then
+        if [[ "$t_is_action_valid" == "yes" ]]; then
             t_was_action="yes"
             shift
             continue
@@ -514,16 +528,15 @@ while [ "a$1" != "a" ]; do
     shift
 done
 
-if [ "a$t_was_action" == "ano" ]; then
+if [[ "$t_was_action" == "no" ]]; then
     o_help=help
     show_help
     exit 1
 fi
 
-# Normalize $o_names a bit
-o_names="`echo $o_names | xargs echo -- | sed 's/^-- \?//g'`"
+# o_names="`echo $o_names | xargs echo -- | sed 's/^-- \?//g'`"
 
-if ! [ -d "$pakroot" ]; then
+if ! [[ -d "$pakroot" ]]; then
     echo "Directory '$pakroot' (PAK root) is missing, creating..."
     if ! mkdir -p "$pakroot"; then
         die "unable to create PAK root directory"
@@ -532,18 +545,34 @@ fi
 
 case $action in
     install)
+        if [[ "${EUID}" != 0 && "${PAK_NO_NONROOT_WARNING}" != '1' ]]; then
+            echo "Warning: you run pak as a non-root user, this may cause 'Permission denied' errors"
+            echo "If you don't want to see this message, set the environmental variable 'PAK_NO_NONROOT_WARNING' to 1"
+        fi
         install_packages "$o_names"
         ;;
     get)
         get_packages "$o_names"
         ;;
     mirror)
+        if [[ "${EUID}" != 0 && "${PAK_NO_NONROOT_WARNING}" != '1' ]]; then
+            echo "Warning: you run pak as a non-root user, this may cause 'Permission denied' errors"
+            echo "If you don't want to see this message, set the environmental variable 'PAK_NO_NONROOT_WARNING' to 1"
+        fi
         mirror_install_packages "$o_names"
         ;;
     update)
+        if [[ "${EUID}" != 0 && "${PAK_NO_NONROOT_WARNING}" != '1' ]]; then
+            echo "Warning: you run pak as a non-root user, this may cause 'Permission denied' errors"
+            echo "If you don't want to see this message, set the environmental variable 'PAK_NO_NONROOT_WARNING' to 1"
+        fi
         update_package_lists
         ;;
     remove)
+        if [[ "${EUID}" != 0 && "${PAK_NO_NONROOT_WARNING}" != '1' ]]; then
+            echo "Warning: you run pak as a non-root user, this may cause 'Permission denied' errors"
+            echo "If you don't want to see this message, set the environmental variable 'PAK_NO_NONROOT_WARNING' to 1"
+        fi
         remove_packages "$o_names"
         ;;
     list)
