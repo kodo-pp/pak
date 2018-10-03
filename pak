@@ -15,7 +15,7 @@ chmod a+rwt "$temp_base_dir" 2>/dev/null || true
 help_exit_status=0
 
 # String data
-version="2.3.1 stupid"
+version="2.3.2 stupid"
 version_string="PAK v $version"
 
 usage_string="Usage: $0 [options] <action> [<package> [<package> ...]]"
@@ -293,7 +293,7 @@ function install_package_file() {
         tar -xf "$temp_dir/$temp_pkgname" -C "$temp_dir/$temp_pkgname.d/" .pak2/license
         local pager=cat
         if [[ "$(cat "$temp_dir/$temp_pkgname.d/.pak2/license" | wc -l)" -gt $(( "$(tput lines)" - 5 )) ]]; then
-            pager=${PAGER:-less}
+            pager=${PAGER:-less -r}
         fi
 
         {
@@ -302,7 +302,7 @@ function install_package_file() {
             echo -e "\e[1m--- START LICENSE TEXT ---\e[0m"
             cat "$temp_dir/$temp_pkgname.d/.pak2/license"
             echo -e "\e[1m---  END LICENSE TEXT  ---\e[0m"
-        } | "$pager"
+        } | $pager
         echo "Do you accept this license?"
         echo -n "[y/N]: "
         local ans
